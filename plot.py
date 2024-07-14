@@ -36,10 +36,10 @@ def main(name):
     df_to_plot = df
 
     rolling_size = 100
-    plt.plot(df_to_plot["size"], df_to_plot["old"].rolling(rolling_size).mean(), label="old")
-    plt.plot(df_to_plot["size"], df_to_plot["branchless"].rolling(rolling_size).mean(), label="branchless")
-    plt.plot(df_to_plot["size"], df_to_plot["prefetch"].rolling(rolling_size).mean(), label="prefetch")
-    plt.plot(df_to_plot["size"], df_to_plot["careful"].rolling(rolling_size).mean(), label="careful")
+    plt.plot(df_to_plot["size"], df_to_plot["old"].rolling(7).median().rolling(rolling_size).mean(), label="old")
+    plt.plot(df_to_plot["size"], df_to_plot["branchless"].rolling(7).median().rolling(rolling_size).mean(), label="branchless")
+    plt.plot(df_to_plot["size"], df_to_plot["prefetch"].rolling(7).median().rolling(rolling_size).mean(), label="prefetch")
+    plt.plot(df_to_plot["size"], df_to_plot["careful"].rolling(7).median().rolling(rolling_size).mean(), label="careful")
 
     if name != "relative":
         plt.gca().set_yscale("log")
