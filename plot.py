@@ -25,12 +25,13 @@ def main(name):
         old_time = float(line[1])
         branchless_time = float(line[2])
         prefetch_time = float(line[3])
+        careful_prefetch_time = float(line[4])
 
-        data.append([size, old_time, branchless_time, prefetch_time ])
+        data.append([size, old_time, branchless_time, prefetch_time, careful_prefetch_time])
 
     file.close()
 
-    df = pd.DataFrame(data, columns=["size", "old", "branchless", "prefetch"])
+    df = pd.DataFrame(data, columns=["size", "old", "branchless", "prefetch", "careful"])
 
     df_to_plot = df
 
@@ -38,6 +39,7 @@ def main(name):
     plt.plot(df_to_plot["size"], df_to_plot["old"].rolling(rolling_size).mean(), label="old")
     plt.plot(df_to_plot["size"], df_to_plot["branchless"].rolling(rolling_size).mean(), label="branchless")
     plt.plot(df_to_plot["size"], df_to_plot["prefetch"].rolling(rolling_size).mean(), label="prefetch")
+    plt.plot(df_to_plot["size"], df_to_plot["careful"].rolling(rolling_size).mean(), label="careful")
 
     if name != "relative":
         plt.gca().set_yscale("log")
@@ -45,7 +47,7 @@ def main(name):
     plt.gca().xaxis.set_major_formatter(tkr.FuncFormatter(sizeof_fmt))
 
     plt.xlabel("Size")
-    plt.ylabel("Nanoseconds" if name == "absolute" else "")
+    plt.ylabel("Nanoseconds" if name == "absolute" else "Time relative to old")
 
     plt.title(f"Binary Search ({name} timings)")
 
