@@ -74,8 +74,8 @@ pub fn prefetchBranchlessBinarySearch(
     while (len > 1) {
         const half: usize = len / 2;
         len -= half;
-        @prefetch(items.ptr + it + len / 2, .{});
-        @prefetch(items.ptr + it + len, .{});
+        @prefetch(items.ptr + it + len / 2 + 1, .{});
+        @prefetch(items.ptr + it + half + len / 2 + 1, .{});
         it += select(compareFn(context, key, items[it + half - 1]) == .gt, half, 0);
     }
     return if (compareFn(context, key, items[it]) == .eq) it else null;
@@ -98,8 +98,8 @@ pub fn carefulPrefetchBranchlessBinarySearch(
         while (len > prefetch_limit) {
             const half: usize = len / 2;
             len -= half;
-            @prefetch(items.ptr + it + len / 2, .{});
-            @prefetch(items.ptr + it + len, .{});
+            @prefetch(items.ptr + it + len / 2 + 1, .{});
+            @prefetch(items.ptr + it + half + len / 2 + 1, .{});
             it += select(compareFn(context, key, items[it + half - 1]) == .gt, half, 0);
         }
     }
