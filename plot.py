@@ -10,8 +10,8 @@ def sizeof_fmt(x, pos):
             return "%3.0f %s" % (x, x_unit)
         x /= 1024
 
-def main():
-    file = open("data.txt", "r")
+def main(name):
+    file = open(name + ".csv", "r")
     lines = file.readlines()
 
     data = []
@@ -22,32 +22,38 @@ def main():
 
         size = int(line[0])
 
-        new_time = int(line[1])
-        old_time = int(line[2])
+        old_time = float(line[1])
+        branchless_time = float(line[2])
+        prefetch_time = float(line[3])
 
-        data.append([size, new_time, old_time])
+        data.append([size, old_time, branchless_time, prefetch_time ])
 
     file.close()
 
-    df = pd.DataFrame(data, columns=["size", "new", "old"])
+    df = pd.DataFrame(data, columns=["size", "old", "branchless", "prefetch"])
 
     df_to_plot = df
 
-    plt.plot(df_to_plot["size"], df_to_plot["new"].rolling(25).mean(), label="new")
-    plt.plot(df_to_plot["size"], df_to_plot["old"].rolling(25).mean(), label="old")
+    rolling_size = 100
+    plt.plot(df_to_plot["size"], df_to_plot["old"].rolling(rolling_size).mean(), label="old")
+    plt.plot(df_to_plot["size"], df_to_plot["branchless"].rolling(rolling_size).mean(), label="branchless")
+    plt.plot(df_to_plot["size"], df_to_plot["prefetch"].rolling(rolling_size).mean(), label="prefetch")
 
-    plt.gca().set_yscale("log")
+    if name != "relative":
+        plt.gca().set_yscale("log")
     plt.gca().set_xscale("log")
     plt.gca().xaxis.set_major_formatter(tkr.FuncFormatter(sizeof_fmt))
 
     plt.xlabel("Size")
-    plt.ylabel("Nanoseconds")
+    plt.ylabel("Nanoseconds" if name == "absolute" else "")
 
-    plt.title("Binary Search")
+    plt.title(f"Binary Search ({name} timings)")
 
     plt.legend()
 
-    plt.savefig("graph.png")
+    plt.savefig(name + ".png")
     plt.show()
+    plt.close()
 
-main()
+main("absolute")
+main("relative")
