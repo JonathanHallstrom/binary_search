@@ -91,9 +91,9 @@ pub fn carefulPrefetchBranchlessBinarySearch(
     var it: usize = 0;
     var len: usize = items.len;
     // when we prefetch ahead to reduce memory bottleneck we prefetch len / 2 and len ahead, so they'll overlap when len / 2 = the size of one cache line
-    const four_cache_lines = 256;
+    const two_cache_lines = 128;
 
-    const prefetch_limit = four_cache_lines / @sizeOf(T);
+    const prefetch_limit = two_cache_lines / @sizeOf(T);
     if (prefetch_limit > 1) {
         while (len > prefetch_limit) {
             const half: usize = len / 2;
