@@ -42,7 +42,25 @@ inline fn select(predicate: bool, a: anytype, b: anytype) @TypeOf(a, b) {
     // if (predicate) res = a;
     // return res;
 
+    // return if (predicate) a else b;
     return ([2]T{ b, a })[@intFromBool(predicate)];
+}
+
+pub fn branchyBinarySearch(
+    comptime T: type,
+    key: anytype,
+    items: []const T,
+    context: anytype,
+    comptime compareFn: fn (context: @TypeOf(context), key: @TypeOf(key), mid_item: T) std.math.Order,
+) ?usize {
+    var it: usize = 0;
+    var len: usize = items.len;
+    while (len > 1) {
+        const half: usize = len / 2;
+        len -= half;
+        it += if (compareFn(context, key, items[it + half - 1]) == .gt) half else 0;
+    }
+    return if (compareFn(context, key, items[it]) == .eq) it else null;
 }
 
 pub fn branchlessBinarySearch(

@@ -1,14 +1,16 @@
 import matplotlib.pyplot as plt
-import matplotlib.ticker as tkr  
+import matplotlib.ticker as tkr
 import pandas as pd
 
+
 def sizeof_fmt(x, pos):
-    if x<0:
+    if x < 0:
         return ""
-    for x_unit in ['bytes', 'kB', 'MB', 'GB', 'TB']:
+    for x_unit in ["bytes", "kB", "MB", "GB", "TB"]:
         if x < 1024:
             return "%3.0f %s" % (x, x_unit)
         x /= 1024
+
 
 def main(name):
     file = open(name + ".csv", "r")
@@ -16,30 +18,23 @@ def main(name):
 
     data = []
 
-    for i in range(0, len(lines), 1):
-        line = lines[i]
-        line = line.split(",")
-
-        size = int(line[0])
-
-        old_time = float(line[1])
-        branchless_time = float(line[2])
-        prefetch_time = float(line[3])
-        careful_prefetch_time = float(line[4])
-
-        data.append([size, old_time, branchless_time, prefetch_time, careful_prefetch_time])
+    labels = lines[0].split(",")
+    for i in range(1, len(lines)):
+        data.append([float(x) for x in lines[i].split(",")])
 
     file.close()
 
-    df = pd.DataFrame(data, columns=["size", "old", "branchless", "prefetch", "careful"])
+    df = pd.DataFrame(data, columns=labels)
 
     df_to_plot = df
 
     rolling_size = 100
-    plt.plot(df_to_plot["size"], df_to_plot["old"].rolling(7).median().rolling(rolling_size).mean(), label="old")
-    plt.plot(df_to_plot["size"], df_to_plot["branchless"].rolling(7).median().rolling(rolling_size).mean(), label="branchless")
-    plt.plot(df_to_plot["size"], df_to_plot["prefetch"].rolling(7).median().rolling(rolling_size).mean(), label="prefetch")
-    plt.plot(df_to_plot["size"], df_to_plot["careful"].rolling(7).median().rolling(rolling_size).mean(), label="careful")
+    for label in labels[1:]:
+        plt.plot(
+            df_to_plot["size"],
+            df_to_plot[label].rolling(7).median().rolling(rolling_size).mean(),
+            label=label,
+        )
 
     if name != "relative":
         plt.gca().set_yscale("log")
@@ -56,6 +51,7 @@ def main(name):
     plt.savefig(name + ".png")
     plt.show()
     plt.close()
+
 
 main("absolute")
 main("relative")
