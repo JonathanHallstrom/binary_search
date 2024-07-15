@@ -11,15 +11,19 @@ test {
     _ = @import("test.zig");
 }
 
+extern fn cacheflush(start: *const anyopaque, bytes: c_int) void;
+
 inline fn flushFromCache(comptime T: type, slice: []const T) void {
-    for (0..slice.len / @sizeOf(T)) |chunk| {
-        const offset = slice.ptr + (chunk * @sizeOf(T));
-        asm volatile ("clflush %[ptr]"
-            :
-            : [ptr] "m" (offset),
-            : "memory"
-        );
-    }
+    // for (0..slice.len / @sizeOf(T)) |chunk| {
+    //     const offset = slice.ptr + (chunk * @sizeOf(T));
+    //     asm volatile ("clflush %[ptr]"
+    //         :
+    //         : [ptr] "m" (offset),
+    //         : "memory"
+    //     );
+    // }
+
+    cacheflush(@ptrCast(slice.ptr), @intCast(@sizeOf(T) * slice.len));
 }
 
 inline fn moveToCache(comptime T: type, slice: []const T) void {
