@@ -60,7 +60,7 @@ def main(name):
     plt.gca().xaxis.set_major_formatter(tkr.FuncFormatter(sizeof_fmt))    
     plt.gca().yaxis.set_major_locator(tkr.LogLocator(base=10.0, subs='auto', numticks=10))
     plt.gca().yaxis.set_minor_locator(tkr.LogLocator(base=10.0, subs='auto', numticks=100))
-
+    plt.gca().grid(True, which='major', linestyle='--', linewidth=1)
 
     
     plt.xlabel("Size")
