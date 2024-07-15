@@ -61,7 +61,8 @@ def main(name):
     plt.gca().yaxis.set_major_locator(tkr.LogLocator(base=10.0, subs='auto', numticks=10))
     plt.gca().yaxis.set_minor_locator(tkr.LogLocator(base=10.0, subs='auto', numticks=100))
     plt.gca().grid(True, which='major', linestyle='--', linewidth=1)
-
+    if name == "relative":
+        plt.gca().set_ylim(0, 2)
     
     plt.xlabel("Size")
     plt.ylabel("Nanoseconds" if name == "absolute" else "Time relative to old (lower is better)")
