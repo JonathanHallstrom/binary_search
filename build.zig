@@ -23,7 +23,7 @@ pub fn build(b: *std.Build) void {
     });
     exe.addCSourceFile(.{
         .file = b.path("src/cacheflush.c"),
-        .flags = &.{ "-O1" },
+        .flags = &.{ "-O1", "-fno-sanitize=undefined,address" },
     });
 
     // This declares intent for the executable to be installed into the
