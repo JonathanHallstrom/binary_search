@@ -34,8 +34,8 @@ pub fn main() !void {
     const incr = 200;
 
     // labels
-    try absolute_timings.writer().print("size,old,branchy,branchless,prefetch,careful\n", .{});
-    try relative_timings.writer().print("size,old,branchy,branchless,prefetch,careful\n", .{});
+    try absolute_timings.writer().print("size,old,branchy,branchless,prefetch,careful,lowerBound,equalRange\n", .{});
+    try relative_timings.writer().print("size,old,branchy,branchless,prefetch,careful,lowerBound,equalRange\n", .{});
     while (size < 1 << 24) {
         const a = try alloc.alloc(Tp, size);
         defer alloc.free(a);
@@ -93,43 +93,71 @@ pub fn main() !void {
         }
         const careful_prefetch_time = ((try std.time.Instant.now()).since(careful_prefetch_start) + iteration_count - 1) / iteration_count;
 
+        moveToCache(Tp, a);
+        moveToCache(Tp, keys);
+        const lower_bound_start = try std.time.Instant.now();
+        for (keys) |key| {
+            const found = std.sort.lowerBound(Tp, key, a, void{}, std.sort.asc(Tp));
+            std.mem.doNotOptimizeAway(found);
+        }
+        const lower_bound_time = ((try std.time.Instant.now()).since(lower_bound_start) + iteration_count - 1) / iteration_count;
+
+        moveToCache(Tp, a);
+        moveToCache(Tp, keys);
+        const equal_range_start = try std.time.Instant.now();
+        for (keys) |key| {
+            const found = std.sort.equalRange(Tp, key, a, void{}, std.sort.asc(Tp));
+            std.mem.doNotOptimizeAway(found);
+        }
+        const equal_range_time = ((try std.time.Instant.now()).since(equal_range_start) + iteration_count - 1) / iteration_count;
+
         // make sure it works
         for (keys) |key| {
             const old = oldBinarySearch(Tp, key, a, void{}, ascending(Tp));
             const branchy = brancyBinarySearch(Tp, key, a, void{}, ascending(Tp));
             const branchless = branchlessBinarySearch(Tp, key, a, void{}, ascending(Tp));
             const prefetch = prefetchBranchlessBinarySearch(Tp, key, a, void{}, ascending(Tp));
-            const carefulPrefetch = carefulPrefetchBranchlessBinarySearch(Tp, key, a, void{}, ascending(Tp));
+            const careful_prefetch = carefulPrefetchBranchlessBinarySearch(Tp, key, a, void{}, ascending(Tp));
+            const lower_bound = std.sort.lowerBound(Tp, key, a, void{}, std.sort.asc(Tp));
+            const equal_range = std.sort.equalRange(Tp, key, a, void{}, std.sort.asc(Tp)).@"0";
 
             const old_val = if (old) |i| a[i] else null;
             const branchy_val = if (branchy) |i| a[i] else null;
             const branchless_val = if (branchless) |i| a[i] else null;
             const prefetch_val = if (prefetch) |i| a[i] else null;
-            const careful_prefetch_val = if (carefulPrefetch) |i| a[i] else null;
+            const careful_prefetch_val = if (careful_prefetch) |i| a[i] else null;
+            const lower_bound_val = if (lower_bound < a.len and a[lower_bound] == key) a[lower_bound] else null;
+            const equal_range_val = if (equal_range < a.len and a[equal_range] == key) a[equal_range] else null;
 
             try std.testing.expectEqual(old_val, branchy_val);
             try std.testing.expectEqual(old_val, branchless_val);
             try std.testing.expectEqual(old_val, prefetch_val);
             try std.testing.expectEqual(old_val, careful_prefetch_val);
+            try std.testing.expectEqual(old_val, lower_bound_val);
+            try std.testing.expectEqual(old_val, equal_range_val);
         }
 
         // std.debug.print("{d:.2} {d:.2}\n", .{ std.fmt.fmtDuration(first_time), std.fmt.fmtDuration(second_time) });
-        try absolute_timings.writer().print("{d},{d},{d},{d},{d},{d}\n", .{
+        try absolute_timings.writer().print("{d},{d},{d},{d},{d},{d},{d},{d}\n", .{
             size * @sizeOf(Tp),
             old_time,
             branchy_time,
             branchless_time,
             prefetch_time,
             careful_prefetch_time,
+            lower_bound_time,
+            equal_range_time,
         });
 
-        try relative_timings.writer().print("{d},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4}\n", .{
+        try relative_timings.writer().print("{d},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4}\n", .{
             size * @sizeOf(Tp),
             @as(f64, @floatFromInt(old_time)) / @as(f64, @floatFromInt(old_time)),
             @as(f64, @floatFromInt(branchy_time)) / @as(f64, @floatFromInt(old_time)),
             @as(f64, @floatFromInt(branchless_time)) / @as(f64, @floatFromInt(old_time)),
             @as(f64, @floatFromInt(prefetch_time)) / @as(f64, @floatFromInt(old_time)),
             @as(f64, @floatFromInt(careful_prefetch_time)) / @as(f64, @floatFromInt(old_time)),
+            @as(f64, @floatFromInt(lower_bound_time)) / @as(f64, @floatFromInt(old_time)),
+            @as(f64, @floatFromInt(equal_range_time)) / @as(f64, @floatFromInt(old_time)),
         });
         size = (size * incr + incr - 2) / (incr - 1);
     }
