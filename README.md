@@ -1,11 +1,14 @@
 # binary_search
 
+## summary
 some benchmarks for a faster binarySearch
 
 benchmarking and plotting heavily inspired by https://gist.github.com/Rexicon226/b533e0f1ec317b873cff691f54e63364
 
-TODO: also speed up lowerBound, upperBound, equalRange
-
-
 ## requirements
 zig 0.12+
+
+### tldr
+~3x speedup for `std.sort.binarySearch`
+
+TODO: also write faster lowerBound, upperBound, and equalRange, 2-4x speedup should be doable
