@@ -11,21 +11,6 @@ test {
     _ = @import("test.zig");
 }
 
-extern fn cacheflush(start: *const anyopaque, bytes: c_int) void;
-
-inline fn flushFromCache(comptime T: type, slice: []const T) void {
-    // for (0..slice.len / @sizeOf(T)) |chunk| {
-    //     const offset = slice.ptr + (chunk * @sizeOf(T));
-    //     asm volatile ("clflush %[ptr]"
-    //         :
-    //         : [ptr] "m" (offset),
-    //         : "memory"
-    //     );
-    // }
-
-    cacheflush(@ptrCast(slice.ptr), @intCast(@sizeOf(T) * slice.len));
-}
-
 inline fn moveToCache(comptime T: type, slice: []const T) void {
     for (slice) |*e| @prefetch(e, .{});
 }
@@ -63,7 +48,7 @@ pub fn main() !void {
         defer alloc.free(keys);
         for (keys) |*key| key.* = rand.int(Tp);
 
-        flushFromCache(Tp, a);
+        moveToCache(Tp, a);
         moveToCache(Tp, keys);
         const old_start = try std.time.Instant.now();
         for (keys) |key| {
@@ -72,7 +57,7 @@ pub fn main() !void {
         }
         const old_time = ((try std.time.Instant.now()).since(old_start) + iteration_count - 1) / iteration_count;
 
-        flushFromCache(Tp, a);
+        moveToCache(Tp, a);
         moveToCache(Tp, keys);
         const branchless_start = try std.time.Instant.now();
         for (keys) |key| {
@@ -81,7 +66,7 @@ pub fn main() !void {
         }
         const branchless_time = ((try std.time.Instant.now()).since(branchless_start) + iteration_count - 1) / iteration_count;
 
-        flushFromCache(Tp, a);
+        moveToCache(Tp, a);
         moveToCache(Tp, keys);
         const branchy_start = try std.time.Instant.now();
         for (keys) |key| {
@@ -90,7 +75,7 @@ pub fn main() !void {
         }
         const branchy_time = ((try std.time.Instant.now()).since(branchy_start) + iteration_count - 1) / iteration_count;
 
-        flushFromCache(Tp, a);
+        moveToCache(Tp, a);
         moveToCache(Tp, keys);
         const prefetch_start = try std.time.Instant.now();
         for (keys) |key| {
@@ -99,7 +84,7 @@ pub fn main() !void {
         }
         const prefetch_time = ((try std.time.Instant.now()).since(prefetch_start) + iteration_count - 1) / iteration_count;
 
-        flushFromCache(Tp, a);
+        moveToCache(Tp, a);
         moveToCache(Tp, keys);
         const careful_prefetch_start = try std.time.Instant.now();
         for (keys) |key| {
