@@ -12,6 +12,15 @@ def sizeof_fmt(x, pos):
         x /= 1024
 
 
+def time_fmt(x, pos):
+    if x < 0:
+        return ""
+    for x_unit in ["ns", "us", "ms", "s"]:
+        if x < 1000:
+            return "%3.0f %s" % (x, x_unit)
+        x /= 1000
+
+
 def main(name):
     file = open(name + ".csv", "r")
     lines = file.readlines()
@@ -29,6 +38,7 @@ def main(name):
     df_to_plot = df
 
     rolling_size = 100
+    plt.figure(figsize=(14,10))
     for label in labels[1:]:
         plt.plot(
             df_to_plot["size"],
@@ -36,13 +46,25 @@ def main(name):
             label=label,
         )
 
-    if name != "relative":
-        plt.gca().set_yscale("log")
-    plt.gca().set_xscale("log")
-    plt.gca().xaxis.set_major_formatter(tkr.FuncFormatter(sizeof_fmt))
+    plt.gca().set_yscale("log")
 
+    if name == "relative":
+        simple_formatter = lambda x, _: "%0.1f" % x
+        plt.gca().yaxis.set_major_formatter(tkr.FuncFormatter(simple_formatter))
+        plt.gca().yaxis.set_minor_formatter(tkr.FuncFormatter(simple_formatter))
+    elif name == "absolute":
+        plt.gca().yaxis.set_major_formatter(tkr.FuncFormatter(time_fmt))
+    else:
+        raise Exception("Unknown name: " + name)
+    plt.gca().set_xscale("log")
+    plt.gca().xaxis.set_major_formatter(tkr.FuncFormatter(sizeof_fmt))    
+    plt.gca().yaxis.set_major_locator(tkr.LogLocator(base=10.0, subs='auto', numticks=10))
+    plt.gca().yaxis.set_minor_locator(tkr.LogLocator(base=10.0, subs='auto', numticks=100))
+
+
+    
     plt.xlabel("Size")
-    plt.ylabel("Nanoseconds" if name == "absolute" else "Time relative to old")
+    plt.ylabel("Nanoseconds" if name == "absolute" else "Time relative to old (lower is better)")
 
     plt.title(f"Binary Search ({name} timings)")
 
