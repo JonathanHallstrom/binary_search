@@ -1,2 +1,5 @@
 zig-out
 .zig-cache
+
+# support version 0.12.0
+zig-cache
