@@ -60,7 +60,7 @@ pub fn branchyBinarySearch(
         len -= half;
         it += if (compareFn(context, key, items[it + half - 1]) == .gt) half else 0;
     }
-    return if (compareFn(context, key, items[it]) == .eq) it else null;
+    return if (it < items.len and compareFn(context, key, items[it]) == .eq) it else null;
 }
 
 pub fn branchlessBinarySearch(
@@ -77,7 +77,7 @@ pub fn branchlessBinarySearch(
         len -= half;
         it += select(compareFn(context, key, items[it + half - 1]) == .gt, half, 0);
     }
-    return if (compareFn(context, key, items[it]) == .eq) it else null;
+    return if (it < items.len and compareFn(context, key, items[it]) == .eq) it else null;
 }
 
 pub fn prefetchBranchlessBinarySearch(
@@ -96,7 +96,7 @@ pub fn prefetchBranchlessBinarySearch(
         @prefetch(items.ptr + it + half + len / 2 + 1, .{});
         it += select(compareFn(context, key, items[it + half - 1]) == .gt, half, 0);
     }
-    return if (compareFn(context, key, items[it]) == .eq) it else null;
+    return if (it < items.len and compareFn(context, key, items[it]) == .eq) it else null;
 }
 
 pub fn carefulPrefetchBranchlessBinarySearch(
@@ -126,5 +126,79 @@ pub fn carefulPrefetchBranchlessBinarySearch(
         len -= half;
         it += select(compareFn(context, key, items[it + half - 1]) == .gt, half, 0);
     }
-    return if (compareFn(context, key, items[it]) == .eq) it else null;
+    return if (it < items.len and compareFn(context, key, items[it]) == .eq) it else null;
+}
+
+pub fn improvedLowerBound(
+    comptime T: type,
+    key: anytype,
+    items: []const T,
+    context: anytype,
+    comptime lessThan: fn (context: @TypeOf(context), lhs: @TypeOf(key), rhs: T) bool,
+) usize {
+    var it: usize = 0;
+    var len: usize = items.len;
+    // when we prefetch ahead to reduce memory bottleneck we prefetch len / 2 and len ahead, so they'll overlap when len / 2 = the size of one cache line
+    const two_cache_lines = 128;
+
+    const prefetch_limit = two_cache_lines / @sizeOf(T);
+    if (prefetch_limit > 1) {
+        while (len > prefetch_limit) {
+            const half: usize = len / 2;
+            len -= half;
+            @prefetch(items.ptr + it + len / 2 + 1, .{});
+            @prefetch(items.ptr + it + half + len / 2 + 1, .{});
+            it += select(lessThan(context, items[it + half - 1], key), half, 0);
+        }
+    }
+    while (len > 1) {
+        const half: usize = len / 2;
+        len -= half;
+        it += select(lessThan(context, items[it + half - 1], key), half, 0);
+    }
+    if (it < items.len and lessThan(context, items[it], key)) it += 1;
+    return it;
+}
+
+pub fn improvedUpperBound(
+    comptime T: type,
+    key: anytype,
+    items: []const T,
+    context: anytype,
+    comptime lessThan: fn (context: @TypeOf(context), lhs: @TypeOf(key), rhs: T) bool,
+) usize {
+    var it: usize = 0;
+    var len: usize = items.len;
+    // when we prefetch ahead to reduce memory bottleneck we prefetch len / 2 and len ahead, so they'll overlap when len / 2 = the size of one cache line
+    const two_cache_lines = 128;
+
+    const prefetch_limit = two_cache_lines / @sizeOf(T);
+    if (prefetch_limit > 1) {
+        while (len > prefetch_limit) {
+            const half: usize = len / 2;
+            len -= half;
+            @prefetch(items.ptr + it + len / 2 + 1, .{});
+            @prefetch(items.ptr + it + half + len / 2 + 1, .{});
+            it += select(lessThan(context, key, items[it + half - 1]), 0, half);
+        }
+    }
+    while (len > 1) {
+        const half: usize = len / 2;
+        len -= half;
+        it += select(lessThan(context, key, items[it + half - 1]), 0, half);
+    }
+    if (it < items.len and !lessThan(context, key, items[it])) it += 1;
+    return it;
+}
+
+pub fn improvedEqualRange(
+    comptime T: type,
+    key: anytype,
+    items: []const T,
+    context: anytype,
+    comptime lessThan: fn (context: @TypeOf(context), lhs: @TypeOf(key), rhs: T) bool,
+) struct { usize, usize } {
+    const lower = improvedLowerBound(T, key, items, context, lessThan);
+    const upper = improvedUpperBound(T, key, items, context, lessThan);
+    return .{ lower, upper };
 }

@@ -9,6 +9,4 @@ benchmarking and plotting heavily inspired by https://gist.github.com/Rexicon226
 zig 0.12+
 
 ### tldr
-~3x speedup for `std.sort.binarySearch`
-
-TODO: also write faster lowerBound, upperBound, and equalRange, 2-4x speedup should be doable
+~2-4x speedup for `std.sort.binarySearch`, `std.sort.lowerBound`, `std.sort.upperBound`, `std.sort.equalRange`

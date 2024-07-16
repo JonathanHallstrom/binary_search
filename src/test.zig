@@ -7,8 +7,13 @@ const math = std.math;
 const lib = @import("lib.zig");
 const ascending = lib.ascending;
 const oldBinarySearch = lib.oldBinarySearch;
+const brancyBinarySearch = lib.branchyBinarySearch;
 const branchlessBinarySearch = lib.branchlessBinarySearch;
 const prefetchBranchlessBinarySearch = lib.prefetchBranchlessBinarySearch;
+const carefulPrefetchBranchlessBinarySearch = lib.carefulPrefetchBranchlessBinarySearch;
+const improvedLowerBound = lib.improvedLowerBound;
+const improvedUpperBound = lib.improvedUpperBound;
+const improvedEqualRange = lib.improvedEqualRange;
 
 test oldBinarySearch {
     try testImplementation(oldBinarySearch);
@@ -20,6 +25,10 @@ test branchlessBinarySearch {
 
 test prefetchBranchlessBinarySearch {
     try testImplementation(prefetchBranchlessBinarySearch);
+}
+
+test carefulPrefetchBranchlessBinarySearch {
+    try testImplementation(carefulPrefetchBranchlessBinarySearch);
 }
 
 fn testImplementation(binary_search_fn: anytype) !void {
@@ -99,4 +108,37 @@ fn testImplementation(binary_search_fn: anytype) !void {
         @as(?usize, 1),
         binary_search_fn(R, @as(i32, -20), &[_]R{ R.r(-100, -50), R.r(-40, -20), R.r(-10, 20), R.r(30, 40) }, {}, R.order),
     );
+}
+
+test improvedLowerBound {
+    var a: [1024]i32 = undefined;
+    var rng = std.Random.DefaultPrng.init(0);
+    for (a[0..]) |*e| e.* = rng.random().int(i8);
+    std.sort.pdq(i32, a[0..], void{}, std.sort.asc(i32));
+    for (0..1024) |i| {
+        const key: i32 = @as(i32, @intCast(i)) - 512;
+        try std.testing.expectEqual(std.sort.lowerBound(i32, key, a[0..], void{}, std.sort.asc(i32)), improvedLowerBound(i32, key, a[0..], void{}, std.sort.asc(i32)));
+    }
+}
+
+test improvedUpperBound {
+    var a: [1024]i32 = undefined;
+    var rng = std.Random.DefaultPrng.init(0);
+    for (a[0..]) |*e| e.* = rng.random().int(i8);
+    std.sort.pdq(i32, a[0..], void{}, std.sort.asc(i32));
+    for (0..1024) |i| {
+        const key: i32 = @as(i32, @intCast(i)) - 512;
+        try std.testing.expectEqual(std.sort.upperBound(i32, key, a[0..], void{}, std.sort.asc(i32)), improvedUpperBound(i32, key, a[0..], void{}, std.sort.asc(i32)));
+    }
+}
+
+test improvedEqualRange {
+    var a: [1024]i32 = undefined;
+    var rng = std.Random.DefaultPrng.init(0);
+    for (a[0..]) |*e| e.* = rng.random().int(i8);
+    std.sort.pdq(i32, a[0..], void{}, std.sort.asc(i32));
+    for (0..1024) |i| {
+        const key: i32 = @as(i32, @intCast(i)) - 512;
+        try std.testing.expectEqual(std.sort.equalRange(i32, key, a[0..], void{}, std.sort.asc(i32)), improvedEqualRange(i32, key, a[0..], void{}, std.sort.asc(i32)));
+    }
 }
