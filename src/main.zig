@@ -25,7 +25,7 @@ pub fn main() !void {
     var alloc = gpa.allocator();
     var rng = std.Random.DefaultPrng.init(0);
     var rand = rng.random();
-    const Tp = i32;
+    const Tp = u64;
 
     var absolute_timings = try std.fs.cwd().createFile("absolute.csv", .{});
     defer absolute_timings.close();
@@ -37,8 +37,8 @@ pub fn main() !void {
     const incr = 200;
 
     // labels
-    try absolute_timings.writer().print("size,old,branchy,branchless,prefetch,careful,lowerBound,equalRange,improvedLowerBound,improvedUpperBound,improvedEqualRange\n", .{});
-    try relative_timings.writer().print("size,old,branchy,branchless,prefetch,careful,lowerBound,equalRange,improvedLowerBound,improvedUpperBound,improvedEqualRange\n", .{});
+    try absolute_timings.writer().print("size,old,branchy,branchless,prefetch,careful,lowerBound,upperBound,equalRange,improvedLowerBound,improvedUpperBound,improvedEqualRange\n", .{});
+    try relative_timings.writer().print("size,old,branchy,branchless,prefetch,careful,lowerBound,upperBound,equalRange,improvedLowerBound,improvedUpperBound,improvedEqualRange\n", .{});
     while (size < 1 << 24) {
         const a = try alloc.alloc(Tp, size);
         defer alloc.free(a);

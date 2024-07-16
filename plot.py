@@ -40,10 +40,18 @@ def main(name):
     rolling_size = 100
     plt.figure(figsize=(14,10))
     for label in labels[1:]:
+        dashes = []
+        if "lowerbound" in label.lower():
+            dashes = [2, 2]
+        if "upperbound" in label.lower():
+            dashes = [8, 8]
+        if "equalrange" in label.lower():
+            dashes = [8, 2]
         plt.plot(
             df_to_plot["size"],
             df_to_plot[label].rolling(7).median().rolling(rolling_size).mean(),
             label=label,
+            dashes=dashes
         )
 
     plt.gca().set_yscale("log")
