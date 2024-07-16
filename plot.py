@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import matplotlib.ticker as tkr
 import pandas as pd
+import numpy as np
 
 
 def sizeof_fmt(x, pos):
@@ -29,7 +30,8 @@ def main(name):
 
     labels = lines[0].split(",")
     for i in range(1, len(lines)):
-        data.append([float(x) for x in lines[i].split(",")])
+        data_points = [float(x) for x in lines[i].split(",")]
+        data.append(data_points)
 
     file.close()
 
@@ -37,8 +39,10 @@ def main(name):
 
     df_to_plot = df
 
-    rolling_size = 100
-    plt.figure(figsize=(14,10))
+    rolling_size = 25
+    plt.figure(figsize=(14, 10))
+    inf = float("inf")
+    lo, hi = inf, -inf
     for label in labels[1:]:
         dashes = []
         if "lowerbound" in label.lower():
@@ -47,11 +51,16 @@ def main(name):
             dashes = [8, 8]
         if "equalrange" in label.lower():
             dashes = [8, 2]
+        smoothed_data = df_to_plot[label].rolling(rolling_size).median()
+        filter_nan = lambda a: a[~np.isnan(a)]
+        lo = min(lo, min(filter_nan(smoothed_data)))
+        hi = max(hi, max(filter_nan(smoothed_data)))
+
         plt.plot(
             df_to_plot["size"],
-            df_to_plot[label].rolling(7).median().rolling(rolling_size).mean(),
+            smoothed_data,
             label=label,
-            dashes=dashes
+            dashes=dashes,
         )
 
     plt.gca().set_yscale("log")
@@ -65,15 +74,38 @@ def main(name):
     else:
         raise Exception("Unknown name: " + name)
     plt.gca().set_xscale("log")
-    plt.gca().xaxis.set_major_formatter(tkr.FuncFormatter(sizeof_fmt))    
-    plt.gca().yaxis.set_major_locator(tkr.LogLocator(base=10.0, subs='auto', numticks=10))
-    plt.gca().yaxis.set_minor_locator(tkr.LogLocator(base=10.0, subs='auto', numticks=100))
-    plt.gca().grid(True, which='major', linestyle='--', linewidth=1)
+    plt.gca().xaxis.set_major_formatter(tkr.FuncFormatter(sizeof_fmt))
+    plt.gca().yaxis.set_major_locator(
+        tkr.LogLocator(base=10.0, subs="auto", numticks=10)
+    )
+    plt.gca().yaxis.set_minor_locator(
+        tkr.LogLocator(base=10.0, subs="auto", numticks=100)
+    )
+    plt.gca().grid(True, which="major", linestyle="--", linewidth=1)
     if name == "relative":
-        plt.gca().set_ylim(0, 2)
-    
+        lower_lim = 1
+        print(lo, hi)
+        while lower_lim > lo:
+            lower_lim -= 0.1
+        upper_lim = 1
+        while upper_lim < hi:
+            upper_lim += 1
+        plt.gca().set_ylim(lower_lim, upper_lim)
+    elif name == "absolute":
+        lower_lim = 100
+        print(lo, hi)
+        while lower_lim > lo:
+            lower_lim -= 1
+        upper_lim = 0
+        while upper_lim < hi:
+            upper_lim += 100
+        plt.gca().set_ylim(lower_lim, upper_lim)
     plt.xlabel("Size")
-    plt.ylabel("Nanoseconds" if name == "absolute" else "Time relative to old (lower is better)")
+    plt.ylabel(
+        "Nanoseconds"
+        if name == "absolute"
+        else "Time relative to old (lower is better)"
+    )
 
     plt.title(f"Binary Search ({name} timings)")
 

@@ -19,7 +19,6 @@ inline fn moveToCache(comptime T: type, slice: []const T) void {
 }
 
 pub fn main() !void {
-    var size: usize = 1;
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     var alloc = gpa.allocator();
@@ -34,18 +33,31 @@ pub fn main() !void {
     defer relative_timings.close();
 
     // higher grows slower
-    const incr = 200;
+    const incr = 100;
 
     // labels
     try absolute_timings.writer().print("size,old,branchy,branchless,prefetch,careful,lowerBound,upperBound,equalRange,improvedLowerBound,improvedUpperBound,improvedEqualRange\n", .{});
     try relative_timings.writer().print("size,old,branchy,branchless,prefetch,careful,lowerBound,upperBound,equalRange,improvedLowerBound,improvedUpperBound,improvedEqualRange\n", .{});
+
+    var tmp_size: usize = 1;
+    var num_lines: usize = 0;
+    while (tmp_size < 1 << 24) {
+        num_lines += 1;
+        defer tmp_size = ((incr + 1) * tmp_size + incr - 1) / incr;
+    }
+    std.debug.print("num lines: {}\n", .{num_lines});
+
+    var size: usize = 1;
     while (size < 1 << 24) {
+        defer size = ((incr + 1) * size + incr - 1) / incr;
         const a = try alloc.alloc(Tp, size);
         defer alloc.free(a);
         for (a) |*e| e.* = rand.int(Tp);
 
         std.sort.pdq(Tp, a, void{}, std.sort.asc(Tp));
-        const iteration_count: u64 = 1 << 10;
+
+        const iteration_total: u32 = 1 << 16;
+        const iteration_count: u32 = iteration_total / std.math.log2_int_ceil(usize, size + 1);
 
         const keys = try alloc.alloc(Tp, iteration_count);
         defer alloc.free(keys);
@@ -58,7 +70,7 @@ pub fn main() !void {
             const found = oldBinarySearch(Tp, key, a, void{}, ascending(Tp));
             std.mem.doNotOptimizeAway(found);
         }
-        const old_time = ((try std.time.Instant.now()).since(old_start) + iteration_count - 1) / iteration_count;
+        const old_time = @as(f64, @floatFromInt((try std.time.Instant.now()).since(old_start) + iteration_count - 1)) / @as(f64, @floatFromInt(iteration_count));
 
         moveToCache(Tp, a);
         moveToCache(Tp, keys);
@@ -67,7 +79,7 @@ pub fn main() !void {
             const found = branchlessBinarySearch(Tp, key, a, void{}, ascending(Tp));
             std.mem.doNotOptimizeAway(found);
         }
-        const branchless_time = ((try std.time.Instant.now()).since(branchless_start) + iteration_count - 1) / iteration_count;
+        const branchless_time = @as(f64, @floatFromInt((try std.time.Instant.now()).since(branchless_start) + iteration_count - 1)) / @as(f64, @floatFromInt(iteration_count));
 
         moveToCache(Tp, a);
         moveToCache(Tp, keys);
@@ -76,7 +88,7 @@ pub fn main() !void {
             const found = brancyBinarySearch(Tp, key, a, void{}, ascending(Tp));
             std.mem.doNotOptimizeAway(found);
         }
-        const branchy_time = ((try std.time.Instant.now()).since(branchy_start) + iteration_count - 1) / iteration_count;
+        const branchy_time = @as(f64, @floatFromInt((try std.time.Instant.now()).since(branchy_start) + iteration_count - 1)) / @as(f64, @floatFromInt(iteration_count));
 
         moveToCache(Tp, a);
         moveToCache(Tp, keys);
@@ -85,7 +97,7 @@ pub fn main() !void {
             const found = prefetchBranchlessBinarySearch(Tp, key, a, void{}, ascending(Tp));
             std.mem.doNotOptimizeAway(found);
         }
-        const prefetch_time = ((try std.time.Instant.now()).since(prefetch_start) + iteration_count - 1) / iteration_count;
+        const prefetch_time = @as(f64, @floatFromInt((try std.time.Instant.now()).since(prefetch_start) + iteration_count - 1)) / @as(f64, @floatFromInt(iteration_count));
 
         moveToCache(Tp, a);
         moveToCache(Tp, keys);
@@ -94,7 +106,7 @@ pub fn main() !void {
             const found = carefulPrefetchBranchlessBinarySearch(Tp, key, a, void{}, ascending(Tp));
             std.mem.doNotOptimizeAway(found);
         }
-        const careful_prefetch_time = ((try std.time.Instant.now()).since(careful_prefetch_start) + iteration_count - 1) / iteration_count;
+        const careful_prefetch_time = @as(f64, @floatFromInt((try std.time.Instant.now()).since(careful_prefetch_start) + iteration_count - 1)) / @as(f64, @floatFromInt(iteration_count));
 
         moveToCache(Tp, a);
         moveToCache(Tp, keys);
@@ -103,7 +115,7 @@ pub fn main() !void {
             const found = std.sort.lowerBound(Tp, key, a, void{}, std.sort.asc(Tp));
             std.mem.doNotOptimizeAway(found);
         }
-        const lower_bound_time = ((try std.time.Instant.now()).since(lower_bound_start) + iteration_count - 1) / iteration_count;
+        const lower_bound_time = @as(f64, @floatFromInt((try std.time.Instant.now()).since(lower_bound_start) + iteration_count - 1)) / @as(f64, @floatFromInt(iteration_count));
 
         moveToCache(Tp, a);
         moveToCache(Tp, keys);
@@ -112,7 +124,7 @@ pub fn main() !void {
             const found = std.sort.lowerBound(Tp, key, a, void{}, std.sort.asc(Tp));
             std.mem.doNotOptimizeAway(found);
         }
-        const upper_bound_time = ((try std.time.Instant.now()).since(upper_bound_start) + iteration_count - 1) / iteration_count;
+        const upper_bound_time = @as(f64, @floatFromInt((try std.time.Instant.now()).since(upper_bound_start) + iteration_count - 1)) / @as(f64, @floatFromInt(iteration_count));
 
         moveToCache(Tp, a);
         moveToCache(Tp, keys);
@@ -121,7 +133,7 @@ pub fn main() !void {
             const found = std.sort.equalRange(Tp, key, a, void{}, std.sort.asc(Tp));
             std.mem.doNotOptimizeAway(found);
         }
-        const equal_range_time = ((try std.time.Instant.now()).since(equal_range_start) + iteration_count - 1) / iteration_count;
+        const equal_range_time = @as(f64, @floatFromInt((try std.time.Instant.now()).since(equal_range_start) + iteration_count - 1)) / @as(f64, @floatFromInt(iteration_count));
 
         moveToCache(Tp, a);
         moveToCache(Tp, keys);
@@ -130,7 +142,7 @@ pub fn main() !void {
             const found = improvedLowerBound(Tp, key, a, void{}, std.sort.asc(Tp));
             std.mem.doNotOptimizeAway(found);
         }
-        const improved_lower_bound_time = ((try std.time.Instant.now()).since(improved_lower_bound_start) + iteration_count - 1) / iteration_count;
+        const improved_lower_bound_time = @as(f64, @floatFromInt((try std.time.Instant.now()).since(improved_lower_bound_start) + iteration_count - 1)) / @as(f64, @floatFromInt(iteration_count));
 
         moveToCache(Tp, a);
         moveToCache(Tp, keys);
@@ -139,7 +151,7 @@ pub fn main() !void {
             const found = improvedUpperBound(Tp, key, a, void{}, std.sort.asc(Tp));
             std.mem.doNotOptimizeAway(found);
         }
-        const improved_upper_bound_time = ((try std.time.Instant.now()).since(improved_upper_bound_start) + iteration_count - 1) / iteration_count;
+        const improved_upper_bound_time = @as(f64, @floatFromInt((try std.time.Instant.now()).since(improved_upper_bound_start) + iteration_count - 1)) / @as(f64, @floatFromInt(iteration_count));
 
         moveToCache(Tp, a);
         moveToCache(Tp, keys);
@@ -148,7 +160,7 @@ pub fn main() !void {
             const found = improvedEqualRange(Tp, key, a, void{}, std.sort.asc(Tp));
             std.mem.doNotOptimizeAway(found);
         }
-        const improved_equal_range_time = ((try std.time.Instant.now()).since(improved_equal_range_start) + iteration_count - 1) / iteration_count;
+        const improved_equal_range_time = @as(f64, @floatFromInt((try std.time.Instant.now()).since(improved_equal_range_start) + iteration_count - 1)) / @as(f64, @floatFromInt(iteration_count));
 
         // make sure it works
         for (keys) |key| {
@@ -190,8 +202,7 @@ pub fn main() !void {
             try std.testing.expectEqual(old_val, improved_equal_range_val);
         }
 
-        // std.debug.print("{d:.2} {d:.2}\n", .{ std.fmt.fmtDuration(first_time), std.fmt.fmtDuration(second_time) });
-        try absolute_timings.writer().print("{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n", .{
+        try absolute_timings.writer().print("{d},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4}\n", .{
             size * @sizeOf(Tp),
             old_time,
             branchy_time,
@@ -208,18 +219,17 @@ pub fn main() !void {
 
         try relative_timings.writer().print("{d},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4}\n", .{
             size * @sizeOf(Tp),
-            @as(f64, @floatFromInt(old_time)) / @as(f64, @floatFromInt(old_time)),
-            @as(f64, @floatFromInt(branchy_time)) / @as(f64, @floatFromInt(old_time)),
-            @as(f64, @floatFromInt(branchless_time)) / @as(f64, @floatFromInt(old_time)),
-            @as(f64, @floatFromInt(prefetch_time)) / @as(f64, @floatFromInt(old_time)),
-            @as(f64, @floatFromInt(careful_prefetch_time)) / @as(f64, @floatFromInt(old_time)),
-            @as(f64, @floatFromInt(lower_bound_time)) / @as(f64, @floatFromInt(old_time)),
-            @as(f64, @floatFromInt(upper_bound_time)) / @as(f64, @floatFromInt(old_time)),
-            @as(f64, @floatFromInt(equal_range_time)) / @as(f64, @floatFromInt(old_time)),
-            @as(f64, @floatFromInt(improved_lower_bound_time)) / @as(f64, @floatFromInt(old_time)),
-            @as(f64, @floatFromInt(improved_upper_bound_time)) / @as(f64, @floatFromInt(old_time)),
-            @as(f64, @floatFromInt(improved_equal_range_time)) / @as(f64, @floatFromInt(old_time)),
+            old_time / old_time,
+            branchy_time / old_time,
+            branchless_time / old_time,
+            prefetch_time / old_time,
+            careful_prefetch_time / old_time,
+            lower_bound_time / old_time,
+            upper_bound_time / old_time,
+            equal_range_time / old_time,
+            improved_lower_bound_time / old_time,
+            improved_upper_bound_time / old_time,
+            improved_equal_range_time / old_time,
         });
-        size = (size * incr + incr - 2) / (incr - 1);
     }
 }
