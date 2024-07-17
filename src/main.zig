@@ -18,6 +18,12 @@ inline fn moveToCache(comptime T: type, slice: []const T) void {
     for (slice) |*e| @prefetch(e, .{});
 }
 
+// higher takes longer
+const search_work_per_iteration = 1 << 16;
+
+// higher grows slower
+const growth_factor = 400;
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -32,32 +38,38 @@ pub fn main() !void {
     var relative_timings = try std.fs.cwd().createFile("relative.csv", .{});
     defer relative_timings.close();
 
-    // higher grows slower
-    const incr = 100;
-
     // labels
     try absolute_timings.writer().print("size,old,branchy,branchless,prefetch,careful,lowerBound,upperBound,equalRange,improvedLowerBound,improvedUpperBound,improvedEqualRange\n", .{});
     try relative_timings.writer().print("size,old,branchy,branchless,prefetch,careful,lowerBound,upperBound,equalRange,improvedLowerBound,improvedUpperBound,improvedEqualRange\n", .{});
 
-    var tmp_size: usize = 1;
-    var num_lines: usize = 0;
-    while (tmp_size < 1 << 24) {
+    const num_functions = 12;
+    comptime var tmp_size = 1;
+    comptime var num_lines = 0;
+    comptime var total_work = 0;
+    const estimate_work_from_size = struct {
+        inline fn impl(size: usize) usize {
+            return size * std.math.log2_int_ceil(usize, size) + search_work_per_iteration * num_functions;
+        }
+    }.impl;
+    const start = try std.time.Instant.now();
+    @setEvalBranchQuota(1 << 30);
+    inline while (tmp_size < 1 << 24) {
         num_lines += 1;
-        defer tmp_size = ((incr + 1) * tmp_size + incr - 1) / incr;
+        total_work += comptime estimate_work_from_size(tmp_size);
+        defer tmp_size = ((growth_factor + 1) * tmp_size + growth_factor - 1) / growth_factor;
     }
-    std.debug.print("num lines: {}\n", .{num_lines});
-
     var size: usize = 1;
+    var lines_printed: usize = 0;
+    var work_done: usize = 0;
     while (size < 1 << 24) {
-        defer size = ((incr + 1) * size + incr - 1) / incr;
+        defer size = ((growth_factor + 1) * size + growth_factor - 1) / growth_factor;
         const a = try alloc.alloc(Tp, size);
         defer alloc.free(a);
         for (a) |*e| e.* = rand.int(Tp);
 
         std.sort.pdq(Tp, a, void{}, std.sort.asc(Tp));
 
-        const iteration_total: u32 = 1 << 16;
-        const iteration_count: u32 = iteration_total / std.math.log2_int_ceil(usize, size + 1);
+        const iteration_count: u32 = @as(u32, search_work_per_iteration) / std.math.log2_int_ceil(usize, size + 1);
 
         const keys = try alloc.alloc(Tp, iteration_count);
         defer alloc.free(keys);
@@ -231,5 +243,43 @@ pub fn main() !void {
             improved_upper_bound_time / old_time,
             improved_equal_range_time / old_time,
         });
+        lines_printed += 1;
+
+        work_done += estimate_work_from_size(size);
+        const percent = (100 * work_done) / total_work;
+        const percentf = (100.0 * @as(f64, @floatFromInt(work_done))) / total_work;
+        const num_digits = std.fmt.comptimePrint("{}", .{num_lines}).len;
+        const num_digits_as_str = std.fmt.comptimePrint("{}", .{num_digits});
+        const elapsed_ns = (try std.time.Instant.now()).since(start);
+        const estimated_total: u64 = @intFromFloat(@as(f64, @floatFromInt(elapsed_ns)) * 100 / @max(1, percentf));
+        const estimated_remaining_ns: u64 = estimated_total - elapsed_ns;
+
+        const simple_duration_fmt = struct {
+            fn impl(ns: usize) [9]u8 {
+                var res: [9]u8 = "00h00m00s".*;
+                const seconds = ns / std.time.ns_per_s % 60;
+                const minutes = ns / std.time.ns_per_min % 60;
+                const hours = ns / std.time.ns_per_hour % 100;
+                res[0] += @intCast(hours / 10);
+                res[1] += @intCast(hours % 10);
+                res[3] += @intCast(minutes / 10);
+                res[4] += @intCast(minutes % 10);
+                res[6] += @intCast(seconds / 10);
+                res[7] += @intCast(seconds % 10);
+                return res;
+            }
+        }.impl;
+
+        if (percentf > 0.01) {
+            std.debug.print("\rProgress: {d:2}% ({d:" ++ num_digits_as_str ++ "}/{} steps) Elapsed: {s} Remaining: {s} Total: {s}", .{
+                percent,
+                lines_printed,
+                num_lines,
+                simple_duration_fmt(elapsed_ns),
+                simple_duration_fmt(estimated_remaining_ns),
+                simple_duration_fmt(estimated_total),
+            });
+        }
     }
+    std.debug.print("\n", .{});
 }
