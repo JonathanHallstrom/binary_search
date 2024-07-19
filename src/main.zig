@@ -9,6 +9,8 @@ const carefulPrefetchBranchlessBinarySearch = lib.carefulPrefetchBranchlessBinar
 const improvedLowerBound = lib.improvedLowerBound;
 const improvedUpperBound = lib.improvedUpperBound;
 const improvedEqualRange = lib.improvedEqualRange;
+const alexandrescuLowerBound = lib.alexandrescuLowerBound;
+const alexandrescuUpperBound = lib.alexandrescuUpperBound;
 
 test {
     _ = @import("test.zig");
@@ -24,11 +26,32 @@ const search_work_per_iteration = 1 << 16;
 // higher grows slower
 const growth_factor = 400;
 
+fn nextSize(size: usize) usize {
+    return (size * (growth_factor + 1) + growth_factor - 1) / growth_factor;
+}
+
+const num_functions = 14;
+
+fn estimateWorkFromSize(size: usize) usize {
+    return std.math.log10_int(size) * size + search_work_per_iteration * num_functions;
+}
+
+fn simpleDurationFmt(ns: usize) [14]u8 {
+    var res: [14]u8 = undefined;
+    const milliseconds = ns / std.time.ns_per_ms % 1000;
+    const seconds = ns / std.time.ns_per_s % 60;
+    const minutes = ns / std.time.ns_per_min % 60;
+    const hours = ns / std.time.ns_per_hour % 100;
+
+    _ = std.fmt.bufPrint(&res, "{d:0>2}h{d:0>2}m{d:0>2}s{d:0>3}ms", .{ hours, minutes, seconds, milliseconds }) catch undefined;
+    return res;
+}
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
-    var alloc = gpa.allocator();
-    var rng = std.Random.DefaultPrng.init(0);
+    const alloc = std.heap.raw_c_allocator;
+    var rng = std.Random.Pcg.init(0);
     var rand = rng.random();
     const Tp = u64;
 
@@ -39,40 +62,38 @@ pub fn main() !void {
     defer relative_timings.close();
 
     // labels
-    try absolute_timings.writer().print("size,old,branchy,branchless,prefetch,careful,lowerBound,upperBound,equalRange,improvedLowerBound,improvedUpperBound,improvedEqualRange\n", .{});
-    try relative_timings.writer().print("size,old,branchy,branchless,prefetch,careful,lowerBound,upperBound,equalRange,improvedLowerBound,improvedUpperBound,improvedEqualRange\n", .{});
+    try absolute_timings.writer().print("size,old,branchy,branchless,prefetch,careful,lowerBound,upperBound,equalRange,improvedLowerBound,improvedUpperBound,improvedEqualRange,alexandrescuLowerBound,alexandrescuUpperBound\n", .{});
+    try relative_timings.writer().print("size,old,branchy,branchless,prefetch,careful,lowerBound,upperBound,equalRange,improvedLowerBound,improvedUpperBound,improvedEqualRange,alexandrescuLowerBound,alexandrescuUpperBound\n", .{});
 
-    const num_functions = 12;
     comptime var tmp_size = 1;
     comptime var num_lines = 0;
     comptime var total_work = 0;
-    const estimate_work_from_size = struct {
-        inline fn impl(size: usize) usize {
-            return size * std.math.log2_int_ceil(usize, size) + search_work_per_iteration * num_functions;
-        }
-    }.impl;
+
     const start = try std.time.Instant.now();
     @setEvalBranchQuota(1 << 30);
     inline while (tmp_size < 1 << 24) {
+        defer tmp_size = comptime nextSize(tmp_size);
         num_lines += 1;
-        total_work += comptime estimate_work_from_size(tmp_size);
-        defer tmp_size = ((growth_factor + 1) * tmp_size + growth_factor - 1) / growth_factor;
+        total_work += comptime estimateWorkFromSize(tmp_size);
     }
     var size: usize = 1;
     var lines_printed: usize = 0;
     var work_done: usize = 0;
+    var array = std.ArrayList(Tp).init(alloc);
+    var key_list = std.ArrayList(Tp).init(alloc);
     while (size < 1 << 24) {
-        defer size = ((growth_factor + 1) * size + growth_factor - 1) / growth_factor;
-        const a = try alloc.alloc(Tp, size);
-        defer alloc.free(a);
-        for (a) |*e| e.* = rand.int(Tp);
+        defer size = nextSize(size);
+        while (array.items.len < size) {
+            try array.append(rand.int(Tp));
+        }
+        const a = array.items;
 
         std.sort.pdq(Tp, a, void{}, std.sort.asc(Tp));
 
         const iteration_count: u32 = @as(u32, search_work_per_iteration) / std.math.log2_int_ceil(usize, size + 1);
 
-        const keys = try alloc.alloc(Tp, iteration_count);
-        defer alloc.free(keys);
+        try key_list.resize(iteration_count);
+        const keys = key_list.items;
         for (keys) |*key| key.* = rand.int(Tp);
 
         moveToCache(Tp, a);
@@ -174,6 +195,25 @@ pub fn main() !void {
         }
         const improved_equal_range_time = @as(f64, @floatFromInt((try std.time.Instant.now()).since(improved_equal_range_start) + iteration_count - 1)) / @as(f64, @floatFromInt(iteration_count));
 
+        moveToCache(Tp, a);
+        moveToCache(Tp, keys);
+
+        const alexandrescu_lower_bound_start = try std.time.Instant.now();
+        for (keys) |key| {
+            const found = alexandrescuLowerBound(Tp, key, a, void{}, std.sort.asc(Tp));
+            std.mem.doNotOptimizeAway(found);
+        }
+        const alexandrescu_lower_bound_time = @as(f64, @floatFromInt((try std.time.Instant.now()).since(alexandrescu_lower_bound_start) + iteration_count - 1)) / @as(f64, @floatFromInt(iteration_count));
+
+        moveToCache(Tp, a);
+        moveToCache(Tp, keys);
+        const alexandrescu_upper_bound_start = try std.time.Instant.now();
+        for (keys) |key| {
+            const found = alexandrescuUpperBound(Tp, key, a, void{}, std.sort.asc(Tp));
+            std.mem.doNotOptimizeAway(found);
+        }
+        const alexandrescu_upper_bound_time = @as(f64, @floatFromInt((try std.time.Instant.now()).since(alexandrescu_upper_bound_start) + iteration_count - 1)) / @as(f64, @floatFromInt(iteration_count));
+
         // make sure it works
         for (keys) |key| {
             const old = oldBinarySearch(Tp, key, a, void{}, ascending(Tp));
@@ -187,10 +227,14 @@ pub fn main() !void {
             const improved_lower_bound = improvedLowerBound(Tp, key, a, void{}, std.sort.asc(Tp));
             const improved_upper_bound = improvedUpperBound(Tp, key, a, void{}, std.sort.asc(Tp));
             const improved_equal_range = improvedEqualRange(Tp, key, a, void{}, std.sort.asc(Tp));
+            const alexandrescu_lower_bound = alexandrescuLowerBound(Tp, key, a, void{}, std.sort.asc(Tp));
+            const alexandrescu_upper_bound = alexandrescuUpperBound(Tp, key, a, void{}, std.sort.asc(Tp));
 
             try std.testing.expectEqual(equal_range, improved_equal_range);
             try std.testing.expectEqual(lower_bound, improved_lower_bound);
             try std.testing.expectEqual(upper_bound, improved_upper_bound);
+            try std.testing.expectEqual(lower_bound, alexandrescu_lower_bound);
+            try std.testing.expectEqual(upper_bound, alexandrescu_upper_bound);
             try std.testing.expectEqual(equal_range.@"0", improved_lower_bound);
             try std.testing.expectEqual(equal_range.@"1", improved_upper_bound);
 
@@ -203,6 +247,7 @@ pub fn main() !void {
             const equal_range_val = if (equal_range.@"0" < a.len and a[equal_range.@"0"] == key) a[equal_range.@"0"] else null;
             const improved_lower_bound_val = if (improved_lower_bound < a.len and a[improved_lower_bound] == key) a[improved_lower_bound] else null;
             const improved_equal_range_val = if (improved_equal_range.@"0" < a.len and a[improved_equal_range.@"0"] == key) a[improved_equal_range.@"0"] else null;
+            const alexandrescu_lower_bound_val = if (alexandrescu_lower_bound < a.len and a[alexandrescu_lower_bound] == key) a[alexandrescu_lower_bound] else null;
 
             try std.testing.expectEqual(old_val, branchy_val);
             try std.testing.expectEqual(old_val, branchless_val);
@@ -212,9 +257,10 @@ pub fn main() !void {
             try std.testing.expectEqual(old_val, equal_range_val);
             try std.testing.expectEqual(old_val, improved_lower_bound_val);
             try std.testing.expectEqual(old_val, improved_equal_range_val);
+            try std.testing.expectEqual(old_val, alexandrescu_lower_bound_val);
         }
 
-        try absolute_timings.writer().print("{d},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4}\n", .{
+        try absolute_timings.writer().print("{d},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4}\n", .{
             size * @sizeOf(Tp),
             old_time,
             branchy_time,
@@ -227,9 +273,11 @@ pub fn main() !void {
             improved_lower_bound_time,
             improved_upper_bound_time,
             improved_equal_range_time,
+            alexandrescu_lower_bound_time,
+            alexandrescu_upper_bound_time,
         });
 
-        try relative_timings.writer().print("{d},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4}\n", .{
+        try relative_timings.writer().print("{d},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4}\n", .{
             size * @sizeOf(Tp),
             old_time / old_time,
             branchy_time / old_time,
@@ -242,43 +290,35 @@ pub fn main() !void {
             improved_lower_bound_time / old_time,
             improved_upper_bound_time / old_time,
             improved_equal_range_time / old_time,
+            alexandrescu_lower_bound_time / old_time,
+            alexandrescu_upper_bound_time / old_time,
         });
         lines_printed += 1;
 
-        work_done += estimate_work_from_size(size);
+        work_done += estimateWorkFromSize(size);
         const percent = (100 * work_done) / total_work;
         const percentf = (100.0 * @as(f64, @floatFromInt(work_done))) / total_work;
-        const num_digits = std.fmt.comptimePrint("{}", .{num_lines}).len;
-        const num_digits_as_str = std.fmt.comptimePrint("{}", .{num_digits});
-        const elapsed_ns = (try std.time.Instant.now()).since(start);
+        const now = try std.time.Instant.now();
+        const elapsed_ns = now.since(start);
         const estimated_total: u64 = @intFromFloat(@as(f64, @floatFromInt(elapsed_ns)) * 100 / @max(1, percentf));
         const estimated_remaining_ns: u64 = estimated_total - elapsed_ns;
 
-        const simple_duration_fmt = struct {
-            fn impl(ns: usize) [9]u8 {
-                var res: [9]u8 = "00h00m00s".*;
-                const seconds = ns / std.time.ns_per_s % 60;
-                const minutes = ns / std.time.ns_per_min % 60;
-                const hours = ns / std.time.ns_per_hour % 100;
-                res[0] += @intCast(hours / 10);
-                res[1] += @intCast(hours % 10);
-                res[3] += @intCast(minutes / 10);
-                res[4] += @intCast(minutes % 10);
-                res[6] += @intCast(seconds / 10);
-                res[7] += @intCast(seconds % 10);
-                return res;
-            }
-        }.impl;
-
+        const step_digits = std.fmt.comptimePrint("{}", .{num_lines}).len;
+        const step_digits_str = std.fmt.comptimePrint("{}", .{step_digits});
         if (percentf > 0.01) {
-            std.debug.print("\rProgress: {d:2}% ({d:" ++ num_digits_as_str ++ "}/{} steps) Elapsed: {s} Remaining: {s} Total: {s}", .{
+            var buf: [1024]u8 = undefined;
+
+            // first print to local buffer so theres no flickering
+            const to_print = try std.fmt.bufPrint(&buf, "\rProgress: {d:3}% ({d:" ++ step_digits_str ++ "}/{} steps) Elapsed: {s} Remaining: {s} Total: {s}", .{
                 percent,
                 lines_printed,
                 num_lines,
-                simple_duration_fmt(elapsed_ns),
-                simple_duration_fmt(estimated_remaining_ns),
-                simple_duration_fmt(estimated_total),
+                simpleDurationFmt(elapsed_ns),
+                simpleDurationFmt(estimated_remaining_ns),
+                simpleDurationFmt(estimated_total),
             });
+
+            std.debug.print("{s}", .{to_print});
         }
     }
     std.debug.print("\n", .{});

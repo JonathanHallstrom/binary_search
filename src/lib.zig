@@ -8,6 +8,10 @@ pub fn ascending(T: type) fn (void, T, T) std.math.Order {
     }.impl;
 }
 
+const popt: std.builtin.PrefetchOptions = .{
+    .locality = 1,
+};
+
 pub fn oldBinarySearch(
     comptime T: type,
     key: anytype,
@@ -33,7 +37,6 @@ pub fn oldBinarySearch(
 }
 
 inline fn select(predicate: bool, a: anytype, b: anytype) @TypeOf(a, b) {
-    const T = @TypeOf(a, b);
     // TODO: simplify this, kinda ugly
 
     // return @bitCast(@select(T, @as(@Vector(1, bool), @splat(predicate)), @as(@Vector(1, T), @splat(a)), @as(@Vector(1, T), @splat(b))));
@@ -43,7 +46,15 @@ inline fn select(predicate: bool, a: anytype, b: anytype) @TypeOf(a, b) {
     // return res;
 
     // return if (predicate) a else b;
-    return ([2]T{ b, a })[@intFromBool(predicate)];
+    return ([2]@TypeOf(a, b){ b, a })[@intFromBool(predicate)];
+}
+
+// if (predicate) a else 0
+inline fn select2(predicate: bool, a: usize) usize {
+    const mask: usize = @intFromBool(predicate);
+    var res = a;
+    res *= mask;
+    return res;
 }
 
 pub fn branchyBinarySearch(
@@ -92,8 +103,8 @@ pub fn prefetchBranchlessBinarySearch(
     while (len > 1) {
         const half: usize = len / 2;
         len -= half;
-        @prefetch(items.ptr + it + len / 2 + 1, .{});
-        @prefetch(items.ptr + it + half + len / 2 + 1, .{});
+        @prefetch(items.ptr + it + len / 2 + 1, popt);
+        @prefetch(items.ptr + it + half + len / 2 + 1, popt);
         it += select(compareFn(context, key, items[it + half - 1]) == .gt, half, 0);
     }
     return if (it < items.len and compareFn(context, key, items[it]) == .eq) it else null;
@@ -108,25 +119,25 @@ pub fn carefulPrefetchBranchlessBinarySearch(
 ) ?usize {
     var it: usize = 0;
     var len: usize = items.len;
-    // when we prefetch ahead to reduce memory bottleneck we prefetch len / 2 and len ahead, so they'll overlap when len / 2 = the size of one cache line
-    const two_cache_lines = 128;
+    if (len == 0) return null;
+    const one_cache_line = 64;
 
-    const prefetch_limit = two_cache_lines / @sizeOf(T);
+    const prefetch_limit = one_cache_line / @sizeOf(T);
     if (prefetch_limit > 1) {
         while (len > prefetch_limit) {
             const half: usize = len / 2;
             len -= half;
-            @prefetch(items.ptr + it + len / 2 + 1, .{});
-            @prefetch(items.ptr + it + half + len / 2 + 1, .{});
-            it += select(compareFn(context, key, items[it + half - 1]) == .gt, half, 0);
+            @prefetch(items.ptr + it + len / 2 + 1, popt);
+            @prefetch(items.ptr + it + half + len / 2 + 1, popt);
+            it += select2(compareFn(context, key, items[it + half - 1]) == .gt, half);
         }
     }
     while (len > 1) {
         const half: usize = len / 2;
         len -= half;
-        it += select(compareFn(context, key, items[it + half - 1]) == .gt, half, 0);
+        it += select2(compareFn(context, key, items[it + half - 1]) == .gt, half);
     }
-    return if (it < items.len and compareFn(context, key, items[it]) == .eq) it else null;
+    return if (compareFn(context, key, items[it]) == .eq) it else null;
 }
 
 pub fn improvedLowerBound(
@@ -138,16 +149,15 @@ pub fn improvedLowerBound(
 ) usize {
     var it: usize = 0;
     var len: usize = items.len;
-    // when we prefetch ahead to reduce memory bottleneck we prefetch len / 2 and len ahead, so they'll overlap when len / 2 = the size of one cache line
-    const two_cache_lines = 128;
+    const one_cache_line = 64;
 
-    const prefetch_limit = two_cache_lines / @sizeOf(T);
+    const prefetch_limit = one_cache_line / @sizeOf(T);
     if (prefetch_limit > 1) {
         while (len > prefetch_limit) {
             const half: usize = len / 2;
             len -= half;
-            @prefetch(items.ptr + it + len / 2 + 1, .{});
-            @prefetch(items.ptr + it + half + len / 2 + 1, .{});
+            @prefetch(items.ptr + it + len / 2 + 1, popt);
+            @prefetch(items.ptr + it + half + len / 2 + 1, popt);
             it += select(lessThan(context, items[it + half - 1], key), half, 0);
         }
     }
@@ -169,16 +179,15 @@ pub fn improvedUpperBound(
 ) usize {
     var it: usize = 0;
     var len: usize = items.len;
-    // when we prefetch ahead to reduce memory bottleneck we prefetch len / 2 and len ahead, so they'll overlap when len / 2 = the size of one cache line
-    const two_cache_lines = 128;
+    const one_cache_line = 64;
 
-    const prefetch_limit = two_cache_lines / @sizeOf(T);
+    const prefetch_limit = one_cache_line / @sizeOf(T);
     if (prefetch_limit > 1) {
         while (len > prefetch_limit) {
             const half: usize = len / 2;
             len -= half;
-            @prefetch(items.ptr + it + len / 2 + 1, .{});
-            @prefetch(items.ptr + it + half + len / 2 + 1, .{});
+            @prefetch(items.ptr + it + len / 2 + 1, popt);
+            @prefetch(items.ptr + it + half + len / 2 + 1, popt);
             it += select(lessThan(context, key, items[it + half - 1]), 0, half);
         }
     }
@@ -191,6 +200,48 @@ pub fn improvedUpperBound(
     return it;
 }
 
+pub fn alexandrescuLowerBound(
+    comptime T: type,
+    key: anytype,
+    items: []const T,
+    context: anytype,
+    comptime lessThan: fn (context: @TypeOf(context), lhs: @TypeOf(key), rhs: T) bool,
+) usize {
+    var it: usize = 0;
+    var len: usize = items.len;
+    while (len > 0) {
+        const cut = len / 2;
+        if (lessThan(context, items[it + cut], key)) {
+            it += cut + 1;
+            len -= cut + 1;
+        } else {
+            len = cut;
+        }
+    }
+    return it;
+}
+
+pub fn alexandrescuUpperBound(
+    comptime T: type,
+    key: anytype,
+    items: []const T,
+    context: anytype,
+    comptime lessThan: fn (context: @TypeOf(context), lhs: @TypeOf(key), rhs: T) bool,
+) usize {
+    var it: usize = 0;
+    var len: usize = items.len;
+    while (len > 0) {
+        const cut = len / 2;
+        if (lessThan(context, key, items[it + cut])) {
+            len = cut;
+        } else {
+            it += cut + 1;
+            len -= cut + 1;
+        }
+    }
+    return it;
+}
+
 pub fn improvedEqualRange(
     comptime T: type,
     key: anytype,
@@ -199,6 +250,29 @@ pub fn improvedEqualRange(
     comptime lessThan: fn (context: @TypeOf(context), lhs: @TypeOf(key), rhs: T) bool,
 ) struct { usize, usize } {
     const lower = improvedLowerBound(T, key, items, context, lessThan);
-    const upper = improvedUpperBound(T, key, items, context, lessThan);
-    return .{ lower, upper };
+    // const upper = improvedUpperBound(T, key, items, context, lessThan);
+    // return .{ lower, upper };
+    var len = items.len - lower;
+    var it = lower;
+    while (len > 0) {
+        const cut = len / 4;
+        if (lessThan(context, key, items[it + cut])) {
+            len = cut;
+        } else {
+            it += cut + 1;
+            len -= cut + 1;
+            break;
+        }
+    }
+    while (len > 0) {
+        const cut = len / 2;
+        if (lessThan(context, key, items[it + cut])) {
+            len = cut;
+        } else {
+            it += cut + 1;
+            len -= cut + 1;
+        }
+    }
+
+    return .{ lower, it };
 }

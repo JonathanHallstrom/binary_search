@@ -14,6 +14,8 @@ const carefulPrefetchBranchlessBinarySearch = lib.carefulPrefetchBranchlessBinar
 const improvedLowerBound = lib.improvedLowerBound;
 const improvedUpperBound = lib.improvedUpperBound;
 const improvedEqualRange = lib.improvedEqualRange;
+const alexandrescuLowerBound = lib.alexandrescuLowerBound;
+const alexandrescuUpperBound = lib.alexandrescuUpperBound;
 
 test oldBinarySearch {
     try testImplementation(oldBinarySearch);
@@ -122,6 +124,28 @@ test improvedLowerBound {
 }
 
 test improvedUpperBound {
+    var a: [1024]i32 = undefined;
+    var rng = std.Random.DefaultPrng.init(0);
+    for (a[0..]) |*e| e.* = rng.random().int(i8);
+    std.sort.pdq(i32, a[0..], void{}, std.sort.asc(i32));
+    for (0..1024) |i| {
+        const key: i32 = @as(i32, @intCast(i)) - 512;
+        try std.testing.expectEqual(std.sort.upperBound(i32, key, a[0..], void{}, std.sort.asc(i32)), improvedUpperBound(i32, key, a[0..], void{}, std.sort.asc(i32)));
+    }
+}
+
+test alexandrescuLowerBound {
+    var a: [1024]i32 = undefined;
+    var rng = std.Random.DefaultPrng.init(0);
+    for (a[0..]) |*e| e.* = rng.random().int(i8);
+    std.sort.pdq(i32, a[0..], void{}, std.sort.asc(i32));
+    for (0..1024) |i| {
+        const key: i32 = @as(i32, @intCast(i)) - 512;
+        try std.testing.expectEqual(std.sort.lowerBound(i32, key, a[0..], void{}, std.sort.asc(i32)), improvedLowerBound(i32, key, a[0..], void{}, std.sort.asc(i32)));
+    }
+}
+
+test alexandrescuUpperBound {
     var a: [1024]i32 = undefined;
     var rng = std.Random.DefaultPrng.init(0);
     for (a[0..]) |*e| e.* = rng.random().int(i8);

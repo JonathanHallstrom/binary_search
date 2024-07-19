@@ -51,7 +51,7 @@ def main(name):
             dashes = [8, 8]
         if "equalrange" in label.lower():
             dashes = [8, 2]
-        smoothed_data = df_to_plot[label].rolling(7).median().rolling(rolling_size).mean()
+        smoothed_data = df_to_plot[label].rolling(rolling_size).median()
         filter_nan = lambda a: a[~np.isnan(a)]
         lo = min(lo, min(filter_nan(smoothed_data)))
         hi = max(hi, max(filter_nan(smoothed_data)))
