@@ -6,6 +6,7 @@ const brancyBinarySearch = lib.branchyBinarySearch;
 const branchlessBinarySearch = lib.branchlessBinarySearch;
 const prefetchBranchlessBinarySearch = lib.prefetchBranchlessBinarySearch;
 const carefulPrefetchBranchlessBinarySearch = lib.carefulPrefetchBranchlessBinarySearch;
+const inlineAsmBranchlessBinarySearch = lib.inlineAsmBranchlessBinarySearch;
 const improvedLowerBound = lib.improvedLowerBound;
 const improvedUpperBound = lib.improvedUpperBound;
 const improvedEqualRange = lib.improvedEqualRange;
@@ -30,7 +31,7 @@ fn nextSize(size: usize) usize {
     return (size * (growth_factor + 1) + growth_factor - 1) / growth_factor;
 }
 
-const num_functions = 14;
+const num_functions = 15;
 
 fn estimateWorkFromSize(size: usize) usize {
     return std.math.log10_int(size) * size + search_work_per_iteration * num_functions;
@@ -62,8 +63,8 @@ pub fn main() !void {
     defer relative_timings.close();
 
     // labels
-    try absolute_timings.writer().print("size,old,branchy,branchless,prefetch,careful,lowerBound,upperBound,equalRange,improvedLowerBound,improvedUpperBound,improvedEqualRange,alexandrescuLowerBound,alexandrescuUpperBound\n", .{});
-    try relative_timings.writer().print("size,old,branchy,branchless,prefetch,careful,lowerBound,upperBound,equalRange,improvedLowerBound,improvedUpperBound,improvedEqualRange,alexandrescuLowerBound,alexandrescuUpperBound\n", .{});
+    try absolute_timings.writer().print("size,old,branchy,branchless,prefetch,careful,lowerBound,upperBound,equalRange,improvedLowerBound,improvedUpperBound,improvedEqualRange,inlineAsm,alexandrescuLowerBound,alexandrescuUpperBound\n", .{});
+    try relative_timings.writer().print("size,old,branchy,branchless,prefetch,careful,lowerBound,upperBound,equalRange,improvedLowerBound,improvedUpperBound,improvedEqualRange,inlineAsm,alexandrescuLowerBound,alexandrescuUpperBound\n", .{});
 
     comptime var tmp_size = 1;
     comptime var num_lines = 0;
@@ -154,7 +155,7 @@ pub fn main() !void {
         moveToCache(Tp, keys);
         const upper_bound_start = try std.time.Instant.now();
         for (keys) |key| {
-            const found = std.sort.lowerBound(Tp, key, a, void{}, std.sort.asc(Tp));
+            const found = std.sort.upperBound(Tp, key, a, void{}, std.sort.asc(Tp));
             std.mem.doNotOptimizeAway(found);
         }
         const upper_bound_time = @as(f64, @floatFromInt((try std.time.Instant.now()).since(upper_bound_start) + iteration_count - 1)) / @as(f64, @floatFromInt(iteration_count));
@@ -197,6 +198,15 @@ pub fn main() !void {
 
         moveToCache(Tp, a);
         moveToCache(Tp, keys);
+        const inline_asm_start = try std.time.Instant.now();
+        for (keys) |key| {
+            const found = inlineAsmBranchlessBinarySearch(Tp, key, a, void{}, ascending(Tp));
+            std.mem.doNotOptimizeAway(found);
+        }
+        const inline_asm_time = @as(f64, @floatFromInt((try std.time.Instant.now()).since(inline_asm_start) + iteration_count - 1)) / @as(f64, @floatFromInt(iteration_count));
+
+        moveToCache(Tp, a);
+        moveToCache(Tp, keys);
 
         const alexandrescu_lower_bound_start = try std.time.Instant.now();
         for (keys) |key| {
@@ -227,6 +237,9 @@ pub fn main() !void {
             const improved_lower_bound = improvedLowerBound(Tp, key, a, void{}, std.sort.asc(Tp));
             const improved_upper_bound = improvedUpperBound(Tp, key, a, void{}, std.sort.asc(Tp));
             const improved_equal_range = improvedEqualRange(Tp, key, a, void{}, std.sort.asc(Tp));
+
+            const inline_asm = inlineAsmBranchlessBinarySearch(Tp, key, a, void{}, ascending(Tp));
+
             const alexandrescu_lower_bound = alexandrescuLowerBound(Tp, key, a, void{}, std.sort.asc(Tp));
             const alexandrescu_upper_bound = alexandrescuUpperBound(Tp, key, a, void{}, std.sort.asc(Tp));
 
@@ -247,6 +260,7 @@ pub fn main() !void {
             const equal_range_val = if (equal_range.@"0" < a.len and a[equal_range.@"0"] == key) a[equal_range.@"0"] else null;
             const improved_lower_bound_val = if (improved_lower_bound < a.len and a[improved_lower_bound] == key) a[improved_lower_bound] else null;
             const improved_equal_range_val = if (improved_equal_range.@"0" < a.len and a[improved_equal_range.@"0"] == key) a[improved_equal_range.@"0"] else null;
+            const inline_asm_val = if (inline_asm) |i| a[i] else null;
             const alexandrescu_lower_bound_val = if (alexandrescu_lower_bound < a.len and a[alexandrescu_lower_bound] == key) a[alexandrescu_lower_bound] else null;
 
             try std.testing.expectEqual(old_val, branchy_val);
@@ -257,10 +271,11 @@ pub fn main() !void {
             try std.testing.expectEqual(old_val, equal_range_val);
             try std.testing.expectEqual(old_val, improved_lower_bound_val);
             try std.testing.expectEqual(old_val, improved_equal_range_val);
+            try std.testing.expectEqual(old_val, inline_asm_val);
             try std.testing.expectEqual(old_val, alexandrescu_lower_bound_val);
         }
 
-        try absolute_timings.writer().print("{d},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4}\n", .{
+        try absolute_timings.writer().print("{d},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4}\n", .{
             size * @sizeOf(Tp),
             old_time,
             branchy_time,
@@ -273,11 +288,12 @@ pub fn main() !void {
             improved_lower_bound_time,
             improved_upper_bound_time,
             improved_equal_range_time,
+            inline_asm_time,
             alexandrescu_lower_bound_time,
             alexandrescu_upper_bound_time,
         });
 
-        try relative_timings.writer().print("{d},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4}\n", .{
+        try relative_timings.writer().print("{d},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4}\n", .{
             size * @sizeOf(Tp),
             old_time / old_time,
             branchy_time / old_time,
@@ -290,6 +306,7 @@ pub fn main() !void {
             improved_lower_bound_time / old_time,
             improved_upper_bound_time / old_time,
             improved_equal_range_time / old_time,
+            inline_asm_time / old_time,
             alexandrescu_lower_bound_time / old_time,
             alexandrescu_upper_bound_time / old_time,
         });

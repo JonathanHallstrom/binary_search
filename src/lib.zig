@@ -51,9 +51,17 @@ inline fn select(predicate: bool, a: anytype, b: anytype) @TypeOf(a, b) {
 
 // if (predicate) a else 0
 inline fn select2(predicate: bool, a: usize) usize {
-    const mask: usize = @intFromBool(predicate);
+    const mask = @as(usize, 0) -% @intFromBool(predicate);
     var res = a;
-    res *= mask;
+    if (@import("builtin").cpu.arch.isX86()) {
+        // generates a branch if i dont do it myself :/
+        asm volatile ("and %[mask], %[res]"
+            : [res] "+r" (res),
+            : [mask] "r" (mask),
+        );
+    } else {
+        res &= mask;
+    }
     return res;
 }
 
@@ -111,6 +119,36 @@ pub fn prefetchBranchlessBinarySearch(
 }
 
 pub fn carefulPrefetchBranchlessBinarySearch(
+    comptime T: type,
+    key: anytype,
+    items: []const T,
+    context: anytype,
+    comptime compareFn: fn (context: @TypeOf(context), key: @TypeOf(key), mid_item: T) std.math.Order,
+) ?usize {
+    var it: usize = 0;
+    var len: usize = items.len;
+    if (len == 0) return null;
+    const one_cache_line = 64;
+
+    const prefetch_limit = one_cache_line / @sizeOf(T);
+    if (prefetch_limit > 1) {
+        while (len > prefetch_limit) {
+            const half: usize = len / 2;
+            len -= half;
+            @prefetch(items.ptr + it + len / 2 + 1, popt);
+            @prefetch(items.ptr + it + half + len / 2 + 1, popt);
+            it += select(compareFn(context, key, items[it + half - 1]) == .gt, half, 0);
+        }
+    }
+    while (len > 1) {
+        const half: usize = len / 2;
+        len -= half;
+        it += select(compareFn(context, key, items[it + half - 1]) == .gt, half, 0);
+    }
+    return if (compareFn(context, key, items[it]) == .eq) it else null;
+}
+
+pub fn inlineAsmBranchlessBinarySearch(
     comptime T: type,
     key: anytype,
     items: []const T,
