@@ -23,7 +23,7 @@ def time_fmt(x, pos):
 
 
 def main(name):
-    file = open(name + ".csv", "r")
+    file = open(name.split("_")[0] + ".csv", "r")
     lines = file.readlines()
 
     data = []
@@ -39,7 +39,7 @@ def main(name):
 
     df_to_plot = df
 
-    rolling_size = 75
+    rolling_size = 100 if "smooth" in name else 15  
     plt.figure(figsize=(14, 10))
     inf = float("inf")
     lo, hi = inf, -inf
@@ -65,11 +65,11 @@ def main(name):
 
     plt.gca().set_yscale("log")
 
-    if name == "relative":
+    if "relative" in name:
         simple_formatter = lambda x, _: "%0.1f" % x
         plt.gca().yaxis.set_major_formatter(tkr.FuncFormatter(simple_formatter))
         plt.gca().yaxis.set_minor_formatter(tkr.FuncFormatter(simple_formatter))
-    elif name == "absolute":
+    elif "absolute" in name:
         plt.gca().yaxis.set_major_formatter(tkr.FuncFormatter(time_fmt))
     else:
         raise Exception("Unknown name: " + name)
@@ -82,16 +82,16 @@ def main(name):
         tkr.LogLocator(base=10.0, subs="auto", numticks=100)
     )
     plt.gca().grid(True, which="major", linestyle="--", linewidth=1)
-    if name == "relative":
+    if "relative" in name:
         lower_lim = 1
         print(lo, hi)
         while lower_lim > lo:
-            lower_lim -= 0.1
+            lower_lim -= 0.01
         upper_lim = 1
         while upper_lim < hi:
             upper_lim += 1
         plt.gca().set_ylim(lower_lim, upper_lim)
-    elif name == "absolute":
+    elif "absolute" in name:
         lower_lim = 100
         print(lo, hi)
         while lower_lim > lo:
@@ -118,3 +118,5 @@ def main(name):
 
 main("absolute")
 main("relative")
+main("absolute_smooth")
+main("relative_smooth")
