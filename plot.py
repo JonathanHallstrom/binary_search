@@ -39,7 +39,7 @@ def main(name):
 
     df_to_plot = df
 
-    rolling_size = 50
+    rolling_size = 75
     plt.figure(figsize=(14, 10))
     inf = float("inf")
     lo, hi = inf, -inf

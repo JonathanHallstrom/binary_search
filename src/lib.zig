@@ -36,16 +36,22 @@ pub fn oldBinarySearch(
     return null;
 }
 
+// if (predicate) a else b
 inline fn select(predicate: bool, a: anytype, b: anytype) @TypeOf(a, b) {
     // TODO: simplify this, kinda ugly
 
-    // return @bitCast(@select(T, @as(@Vector(1, bool), @splat(predicate)), @as(@Vector(1, T), @splat(a)), @as(@Vector(1, T), @splat(b))));
+    // const T = @TypeOf(a, b);
+    // const vec: [2]T = @bitCast(@select(T, @as(@Vector(2, bool), @splat(predicate)), @as(@Vector(2, T), @splat(a)), @as(@Vector(2, T), @splat(b))));
+    // return vec[0];
 
+    // const T = @TypeOf(a, b);
     // var res: T = b;
     // if (predicate) res = a;
     // return res;
 
     // return if (predicate) a else b;
+
+    // all of the above generate branches
     return ([2]@TypeOf(a, b){ b, a })[@intFromBool(predicate)];
 }
 
@@ -149,6 +155,24 @@ pub fn carefulPrefetchBranchlessBinarySearch(
 }
 
 pub fn inlineAsmBranchlessBinarySearch(
+    comptime T: type,
+    key: anytype,
+    items: []const T,
+    context: anytype,
+    comptime compareFn: fn (context: @TypeOf(context), key: @TypeOf(key), mid_item: T) std.math.Order,
+) ?usize {
+    var it: usize = 0;
+    var len: usize = items.len;
+    if (len == 0) return null;
+    while (len > 1) {
+        const half: usize = len / 2;
+        len -= half;
+        it += select2(compareFn(context, key, items[it + half - 1]) == .gt, half);
+    }
+    return if (compareFn(context, key, items[it]) == .eq) it else null;
+}
+
+pub fn inlineAsmPrefetchBinarySearch(
     comptime T: type,
     key: anytype,
     items: []const T,

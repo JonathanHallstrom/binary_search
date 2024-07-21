@@ -12,6 +12,7 @@ const branchlessBinarySearch = lib.branchlessBinarySearch;
 const prefetchBranchlessBinarySearch = lib.prefetchBranchlessBinarySearch;
 const carefulPrefetchBranchlessBinarySearch = lib.carefulPrefetchBranchlessBinarySearch;
 const inlineAsmBranchlessBinarySearch = lib.inlineAsmBranchlessBinarySearch;
+const inlineAsmPrefetchBinarySearch = lib.inlineAsmPrefetchBinarySearch;
 const improvedLowerBound = lib.improvedLowerBound;
 const improvedUpperBound = lib.improvedUpperBound;
 const improvedEqualRange = lib.improvedEqualRange;
@@ -35,6 +36,10 @@ test carefulPrefetchBranchlessBinarySearch {
 
 test inlineAsmBranchlessBinarySearch {
     try testImplementation(inlineAsmBranchlessBinarySearch);
+}
+
+test inlineAsmPrefetchBinarySearch {
+    try testImplementation(inlineAsmPrefetchBinarySearch);
 }
 
 fn testImplementation(binary_search_fn: anytype) !void {
