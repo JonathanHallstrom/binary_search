@@ -39,7 +39,7 @@ def main(name):
 
     df_to_plot = df
 
-    rolling_size = 100 if "smooth" in name else 15  
+    rolling_size = 100 if "smooth" in name else 15
     plt.figure(figsize=(14, 10))
     inf = float("inf")
     lo, hi = inf, -inf
@@ -51,6 +51,8 @@ def main(name):
             dashes = [8, 8]
         if "equalrange" in label.lower():
             dashes = [8, 2]
+        if "inline" in label.lower():
+            dashes = [1, 1]
         smoothed_data = df_to_plot[label].rolling(rolling_size).median()
         filter_nan = lambda a: a[~np.isnan(a)]
         lo = min(lo, min(filter_nan(smoothed_data)))
